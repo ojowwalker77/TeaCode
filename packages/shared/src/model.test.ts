@@ -643,6 +643,18 @@ describe("getModelCapabilities Claude capability flags", () => {
     expect(has(undefined)).toBe(false);
   });
 
+  it("gives runtime-discovered (uncataloged) Claude models a full default profile", () => {
+    // A model the CLI reports before it lands in the static catalog (e.g. a new
+    // flagship) is fully featured rather than empty, so its effort ladder and
+    // fast mode are selectable.
+    const caps = getModelCapabilities("claudeAgent", "claude-opus-5");
+    expect(caps.reasoningEffortLevels.length).toBeGreaterThan(0);
+    expect(caps.reasoningEffortLevels.some((l) => l.value === "max")).toBe(true);
+    expect(caps.supportsFastMode).toBe(true);
+    // An unset model still resolves to empty capabilities.
+    expect(getModelCapabilities("claudeAgent", undefined).reasoningEffortLevels.length).toBe(0);
+  });
+
   it("only enables ultrathink keyword handling for Opus 4.6 and Sonnet 4.6", () => {
     const has = (m: string | undefined) =>
       getModelCapabilities("claudeAgent", m).promptInjectedEffortLevels.includes("ultrathink");
