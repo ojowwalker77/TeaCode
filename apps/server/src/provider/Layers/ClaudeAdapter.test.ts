@@ -5,6 +5,7 @@ import path from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type {
   Options as ClaudeQueryOptions,
+  ModelInfo,
   PermissionMode,
   PermissionResult,
   SDKMessage,
@@ -96,8 +97,10 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
     return [];
   };
 
-  readonly supportedModels = async (): Promise<[]> => {
-    return [];
+  public modelsToReturn: ModelInfo[] = [];
+
+  readonly supportedModels = async (): Promise<ModelInfo[]> => {
+    return this.modelsToReturn;
   };
 
   readonly supportedAgents = async (): Promise<[]> => {
@@ -269,6 +272,69 @@ describe("ClaudeAdapterLive", () => {
           issue: "Expected provider 'claudeAgent' but received 'codex'.",
         }),
       );
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("discovers models via a temporary process when no session is active", () => {
+    const harness = makeHarness();
+    harness.query.modelsToReturn = [
+      { value: "claude-opus-5", displayName: "Claude Opus 5", description: "" },
+      { value: "claude-sonnet-5", displayName: "Claude Sonnet 5", description: "" },
+    ];
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const listModels = adapter.listModels;
+      assert.isDefined(listModels);
+      if (!listModels) {
+        return;
+      }
+      const result = yield* listModels({ provider: "claudeAgent" });
+
+      assert.deepEqual(result.models, [
+        { slug: "claude-opus-5", name: "Claude Opus 5" },
+        { slug: "claude-sonnet-5", name: "Claude Sonnet 5" },
+      ]);
+      assert.equal(result.source, "sdk");
+
+      // The discovery process runs read-only and is torn down afterwards.
+      const createInput = harness.getLastCreateQueryInput();
+      assert.equal(createInput?.options.permissionMode, "plan");
+      assert.equal(createInput?.options.persistSession, false);
+      assert.isAbove(harness.query.closeCalls, 0);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("serves models from an active session without a temporary process", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+
+      harness.query.modelsToReturn = [
+        { value: "claude-opus-5", displayName: "Claude Opus 5", description: "" },
+      ];
+      const closeCallsBefore = harness.query.closeCalls;
+
+      const listModels = adapter.listModels;
+      assert.isDefined(listModels);
+      if (!listModels) {
+        return;
+      }
+      const result = yield* listModels({ provider: "claudeAgent" });
+
+      assert.deepEqual(result.models, [{ slug: "claude-opus-5", name: "Claude Opus 5" }]);
+      // The live session query is reused, so no discovery process is spawned or closed.
+      assert.equal(harness.query.closeCalls, closeCallsBefore);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -3094,6 +3160,7 @@ describe("ClaudeAdapterLive", () => {
             },
           ],
           toolUseID: "tool-use-1",
+          requestId: "req-tool-use-1",
         },
       );
 
@@ -3229,6 +3296,7 @@ describe("ClaudeAdapterLive", () => {
         {
           signal: new AbortController().signal,
           toolUseID: "tool-agent-1",
+          requestId: "req-tool-agent-1",
         },
       );
 
@@ -3253,6 +3321,7 @@ describe("ClaudeAdapterLive", () => {
         {
           signal: new AbortController().signal,
           toolUseID: "tool-grep-approval-1",
+          requestId: "req-tool-grep-approval-1",
         },
       );
 
@@ -3802,6 +3871,7 @@ describe("ClaudeAdapterLive", () => {
         {
           signal: new AbortController().signal,
           toolUseID: "tool-exit-1",
+          requestId: "req-tool-exit-1",
         },
       );
 
@@ -3967,6 +4037,7 @@ describe("ClaudeAdapterLive", () => {
       const permissionPromise = canUseTool("AskUserQuestion", askInput, {
         signal: new AbortController().signal,
         toolUseID: "tool-ask-1",
+        requestId: "req-tool-ask-1",
       });
 
       // The adapter should emit a user-input.requested event.
@@ -4089,6 +4160,7 @@ describe("ClaudeAdapterLive", () => {
       const permissionPromise = canUseTool("AskUserQuestion", askInput, {
         signal: new AbortController().signal,
         toolUseID: "tool-ask-multi",
+        requestId: "req-tool-ask-multi",
       });
 
       const requestedEvent = yield* Stream.runHead(adapter.streamEvents);
@@ -4158,6 +4230,7 @@ describe("ClaudeAdapterLive", () => {
       const permissionPromise = canUseTool("AskUserQuestion", askInput, {
         signal: new AbortController().signal,
         toolUseID: "tool-ask-2",
+        requestId: "req-tool-ask-2",
       });
 
       // Should still get user-input.requested even in full-access mode.
@@ -4225,6 +4298,7 @@ describe("ClaudeAdapterLive", () => {
         {
           signal: controller.signal,
           toolUseID: "tool-ask-abort",
+          requestId: "req-tool-ask-abort",
         },
       );
 

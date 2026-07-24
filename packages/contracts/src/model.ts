@@ -284,6 +284,24 @@ const CLAUDE_EXTENDED_THINKING_CAPABILITIES: ModelCapabilities = {
 // Sonnet 5 adds xhigh for long agentic work, while staying in the Sonnet no-fast-mode lane.
 const CLAUDE_SONNET_5_CAPABILITIES: ModelCapabilities = CLAUDE_NO_FAST_XHIGH_CAPABILITIES;
 
+/**
+ * Fallback capability profile for models that are runtime-discovered from the
+ * provider CLI but not (yet) in the static catalog — e.g. a newly released
+ * flagship the SDK reports before a bespoke entry is curated. Discovery owns the
+ * model list; TeaCode owns the effort ladder (ultracode / ultrathink / xhigh are
+ * TeaCode UX concepts the CLI does not describe), so an unrecognized Claude model
+ * defaults to the flagship profile instead of an empty, under-featured one.
+ *
+ * Only providers whose capabilities are NOT derived from runtime discovery need
+ * an entry here; providers that project effort menus from their discovery
+ * response (codex, cursor, grok, kilo, opencode, pi) fall back to empty.
+ */
+export const DEFAULT_MODEL_CAPABILITIES_BY_PROVIDER: Partial<
+  Record<ProviderKind, ModelCapabilities>
+> = {
+  claudeAgent: CLAUDE_FLAGSHIP_CAPABILITIES,
+};
+
 type ModelDefinition = {
   readonly slug: string;
   readonly name: string;

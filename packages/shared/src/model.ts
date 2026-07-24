@@ -1,5 +1,6 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_MODEL_CAPABILITIES_BY_PROVIDER,
   MODEL_CAPABILITIES_INDEX,
   MODEL_OPTIONS_BY_PROVIDER,
   MODEL_SLUG_ALIASES_BY_PROVIDER,
@@ -386,6 +387,14 @@ export function getModelCapabilities(
   const slug = normalizeModelSlug(model, provider);
   if (slug && MODEL_CAPABILITIES_INDEX[provider]?.[slug]) {
     return MODEL_CAPABILITIES_INDEX[provider][slug];
+  }
+  // A real model id that isn't in the static catalog is treated as runtime-
+  // discovered (e.g. a newly released Claude flagship the CLI reports) and gets
+  // the provider's default profile instead of an empty, under-featured one.
+  // An unset model keeps empty capabilities. Providers without a default entry
+  // (their menus come from discovery) also keep empty.
+  if (slug) {
+    return DEFAULT_MODEL_CAPABILITIES_BY_PROVIDER[provider] ?? EMPTY_MODEL_CAPABILITIES;
   }
   return EMPTY_MODEL_CAPABILITIES;
 }
